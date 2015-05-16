@@ -8,11 +8,11 @@ localparam DWIDTH = 8;
 
 sort_engine_if #( 
   .DWIDTH ( DWIDTH ) 
-) data_in ( clk );
+) pkt_i ( clk );
 
 sort_engine_if #( 
   .DWIDTH ( DWIDTH ) 
-) data_out ( clk );
+) pkt_o ( clk );
 
 typedef enum { 
                RANDOM,
@@ -35,7 +35,6 @@ initial
       end
   end
 
-
 initial
   begin
     rst <= 1'b1;
@@ -44,41 +43,61 @@ initial
   end
 
 gnome_sort_engine_wrapper #( 
-  .AWIDTH                                 ( AWIDTH            ),
-  .DWIDTH                                 ( DWIDTH            )
+  .AWIDTH                                 ( AWIDTH         ),
+  .DWIDTH                                 ( DWIDTH         )
 ) gsewp (
-  .clk_i                                  ( clk               ),
-  .rst_i                                  ( rst               ),
+  .clk_i                                  ( clk            ),
+  .rst_i                                  ( rst            ),
 
-  .pkt_i                                  ( data_in           ),
-  .pkt_o                                  ( data_out          )
+  .pkt_i                                  ( pkt_i          ),
+  .pkt_o                                  ( pkt_o          )
 );
+
+bit [DWIDTH-1:0] prev_out_data;
+
+always_ff @( posedge clk )
+  // clear after each output transation 
+  if( pkt_o.eop && pkt_o.val )
+    prev_out_data <= '0;
+  else
+    if( pkt_o.val )
+      prev_out_data <= pkt_o.data;
 
 initial
   begin
-    data_in.sop  = '0;
-    data_in.eop  = '0;
-    data_in.data = '0;
-    data_in.val  = '0;
+    forever
+      begin
+        @cb;
+        // checks that new data in transaction
+        // not smaller than previous
+        if( pkt_o.val )
+          assert( prev_out_data <= pkt_o.data );
+      end
   end
 
+initial
+  begin
+    pkt_i.sop  = '0;
+    pkt_i.eop  = '0;
+    pkt_i.data = '0;
+    pkt_i.val  = '0;
+  end
 
 task send_transaction( trans_data_t data );
-  wait( data_in.busy == 0 )
+  wait( pkt_i.busy == 1'b0 )
   
   for( int i = 0; i < data.size(); i++ ) begin
-    @( posedge data_in.clk );
-
-    data_in.val  <= 1'b1;
-    data_in.data <= data[i];
-    data_in.sop <= ( i == ( 0               ) ); 
-    data_in.eop <= ( i == ( data.size() - 1 ) );
+    pkt_i.val  <= 1'b1;
+    pkt_i.data <= data[i];
+    pkt_i.sop  <= ( i == ( 0               ) ); 
+    pkt_i.eop  <= ( i == ( data.size() - 1 ) );
+    @( posedge pkt_i.clk );
    end
 
-   @( posedge data_in.clk );
-   data_in.sop <= 1'b0;
-   data_in.val <= 1'b0;
-   data_in.eop <= 1'b0;
+   pkt_i.sop <= 1'b0;
+   pkt_i.val <= 1'b0;
+   pkt_i.eop <= 1'b0;
+   @( posedge pkt_i.clk );
 endtask
 
 function trans_data_t gen_transaction( int size, sort_trans_t trans_type );
@@ -120,38 +139,95 @@ function trans_data_t gen_transaction( int size, sort_trans_t trans_type );
 endfunction
 
 mailbox #( trans_data_t ) in_fifo;
+mailbox #( trans_data_t ) in_fifo_ref;
 
-trans_data_t new_trans;
+task create_transaction( int size, sort_trans_t trans_type );
+  trans_data_t trans;
+  
+  trans = gen_transaction( size, trans_type );
+  
+  assert( trans.size() == size );
+
+  in_fifo.put( trans );
+  
+  trans.sort();
+  in_fifo_ref.put( trans );
+
+endtask
+
+task transaction_monitor( output trans_data_t trans );
+  trans = {};
+
+  forever
+    begin
+      @cb;
+      if( pkt_o.val )
+        trans.push_back( pkt_o.data );
+
+      if( pkt_o.val && pkt_o.eop )
+        break;
+    end
+endtask
+
+task transaction_checker( );
+  trans_data_t ref_trans;
+  trans_data_t out_trans;
+
+  forever
+    begin
+      transaction_monitor( out_trans );
+      in_fifo_ref.get( ref_trans );
+
+      if( out_trans != ref_trans )
+        $error( "Didn't match!" );
+    end
+endtask
 
 initial
   begin
-    in_fifo = new( );
-
-    //new_trans = gen_transaction( 1, RANDOM );
-    //in_fifo.put( new_trans );
-
-    //new_trans = gen_transaction( 2, RANDOM );
-    //in_fifo.put( new_trans );
-
-    //new_trans = gen_transaction( 4, INCREASING );
-    //in_fifo.put( new_trans );
-
-    new_trans = gen_transaction( 5, RANDOM );
-    in_fifo.put( new_trans );
+    transaction_checker( );
   end
 
-trans_data_t new_trans_2;
-
 initial
   begin
-    forever
+    in_fifo     = new( );
+    in_fifo_ref = new( );
+
+    create_transaction( 1, RANDOM );
+    create_transaction( 2, RANDOM );
+    create_transaction( 4, INCREASING );
+    create_transaction( 4, DECREASING );
+
+    create_transaction( 5, RANDOM );
+    create_transaction( 15, RANDOM );
+
+    create_transaction( 2**AWIDTH-1, RANDOM );
+
+    create_transaction( 2**AWIDTH, RANDOM );
+    create_transaction( 2**AWIDTH, INCREASING );
+    create_transaction( 2**AWIDTH, RANDOM );
+    create_transaction( 2**AWIDTH, DECREASING );
+    create_transaction( 2**AWIDTH, CONSTANT );
+
+    for( int i = 0; i < 100; i++ )
       begin
-        @cb;
-        if( in_fifo.num() > 0 ) begin
-          in_fifo.get( new_trans_2 ); 
-          send_transaction( new_trans_2 );
-        end
+        create_transaction( $urandom_range( 1, 2**AWIDTH ), RANDOM );
       end
   end
 
+trans_data_t trans_to_dut;
+
+initial
+  begin
+    @cb;
+    forever
+      begin
+        @cb;
+        if( in_fifo.num() > 0 ) 
+          begin
+            in_fifo.get( trans_to_dut ); 
+            send_transaction( trans_to_dut );
+          end
+      end
+  end
 endmodule

@@ -17,4 +17,4 @@ add wave -r -hex *
 
 # running simulation for 1000 nanoseconds
 # you can change for run -all for infinity simulation :-)
-run 1000ns
+run 30000ns

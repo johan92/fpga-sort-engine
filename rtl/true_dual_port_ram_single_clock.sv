@@ -67,4 +67,14 @@ module true_dual_port_ram_single_clock
             end
         endgenerate
 
+// synthesis translate_off
+
+// we should do not write to the same address at the same tick
+// from different ports
+assert property(
+  @( posedge clk )
+   ( ( we_a && we_b && ( addr_a == addr_b ) ) == 1'b0 )
+);
+
+// synthesis translate_on
 endmodule

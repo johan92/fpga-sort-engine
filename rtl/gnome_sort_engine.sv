@@ -12,21 +12,24 @@ module gnome_sort_engine #(
   // strob to start sorting
   input               run_i,
 
-  input               wr_req_i,
-  input  [DWIDTH-1:0] wr_data_i,
-
-  input               rd_req_i,
-  output [DWIDTH-1:0] rd_data_o,
-  output logic        rd_last_word_o,
-
-  output logic        done_o
+  input  logic              wr_req_i,
+  input  logic [DWIDTH-1:0] wr_data_i,
+  
+  // out avalon streaming
+  input  logic              out_ready_i,
+  output logic [DWIDTH-1:0] out_data_o,
+  output logic              out_valid_o,
+  output logic              out_sop_o,
+  output logic              out_eop_o
 
 );
+
 logic [AWIDTH:0]   array_size;
 
 logic [DWIDTH-1:0] wr_data_a;
 logic [DWIDTH-1:0] rd_data_a;
 logic [AWIDTH-1:0] addr_a;
+logic [AWIDTH-1:0] addr_a_d1;
 logic              wr_en_a;
 
 logic [DWIDTH-1:0] wr_data_b;
@@ -45,6 +48,10 @@ logic              need_swap;
 logic              in_sorting;
 
 logic [AWIDTH-1:0] rd_ptr;
+
+logic              sort_done;
+
+logic              rd_last_word_o;
 
 typedef enum int unsigned { IDLE, 
                             READ,
@@ -71,8 +78,14 @@ always_ff @( posedge clk_i or posedge rst_i )
     if( run_i )
       in_sorting <= 1'b1;
     else
-      if( done_o ) //FIXME: one tick earlier
+      if( sort_done ) //FIXME: one tick earlier
         in_sorting <= 1'b0;
+
+logic rd_req;
+logic in_ready;
+
+assign rd_req   = sort_done && in_ready && ( !pkt_o.eop );  
+assign in_ready = ( !out_valid_o ) || out_ready_i;
 
 always_ff @( posedge clk_i or posedge rst_i )
   if( rst_i )
@@ -81,7 +94,7 @@ always_ff @( posedge clk_i or posedge rst_i )
     if( run_i )
       rd_ptr <= '0;
     else
-      if( rd_req_i )
+      if( rd_req && in_ready )
         rd_ptr <= rd_ptr + 1'd1;
 
 always_ff @( posedge clk_i or posedge rst_i )
@@ -152,13 +165,13 @@ always_comb
 
 always_ff @( posedge clk_i or posedge rst_i )
   if( rst_i )
-    done_o <= 1'b0;
+    sort_done <= 1'b0;
   else
     if( srst_i )
-      done_o <= 1'b0;
+      sort_done <= 1'b0;
     else
       if( in_sorting && ( next_tick != tick ) && ( next_tick == IDLE ) )
-        done_o <= 1'b1;
+        sort_done <= 1'b1;
 
 assign need_swap = ( rd_data_a < rd_data_b ); 
 
@@ -194,11 +207,20 @@ always_comb
         wr_data_a = rd_data_b;
       end
 
-    if( rd_req_i )
+    if( rd_req )
       begin
         addr_a = rd_ptr;
       end
+    else
+      if( out_valid_o && !out_ready_i )
+        addr_a = addr_a_d1; 
   end
+
+always_ff @( posedge clk_i or posedge rst_i )
+  if( rst_i ) 
+    addr_a_d1 <= '0;
+  else
+    addr_a_d1 <= addr_a;
 
 always_comb
   begin
@@ -214,13 +236,28 @@ always_comb
       end
   end
 
-assign rd_data_o = rd_data_a;
+assign out_data_o  = rd_data_a;
+
+always_ff @( posedge clk_i or posedge rst_i )
+  if( rst_i )
+    begin
+      out_valid_o <= '0;
+      out_sop_o   <= '0;
+      out_eop_o   <= '0;
+    end
+  else
+    if( in_ready )
+      begin
+        out_valid_o <= rd_req;
+        out_sop_o   <= rd_req && ( rd_ptr == 'd0 );
+        out_eop_o   <= rd_req && ( rd_ptr == ( array_size - 1'd1 ) ); 
+      end
 
 always_ff @( posedge clk_i or posedge rst_i )
   if( rst_i )
     rd_last_word_o <= 1'b0;
   else
-    rd_last_word_o <= ( rd_ptr == ( array_size - 1'd1 ) ) && rd_req_i;
+    rd_last_word_o <= ( rd_ptr == ( array_size - 1'd1 ) ) && rd_req;
 
 true_dual_port_ram_single_clock #(
   .DATA_WIDTH                             ( DWIDTH            ), 

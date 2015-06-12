@@ -9,14 +9,14 @@ logic              sop;
 logic              eop;
 logic [DWIDTH-1:0] data;
 logic              val;
-logic              busy;
+logic              ready;
 
 modport master( 
   output sop,
          eop,
          data,
          val,
-  input  busy
+  input  ready
 );
 
 modport slave(
@@ -24,7 +24,7 @@ modport slave(
          eop,
          data,
          val,
-  output busy
+  output ready
 
 );
 

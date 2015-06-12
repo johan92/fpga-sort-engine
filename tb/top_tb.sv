@@ -53,6 +53,32 @@ gnome_sort_engine_wrapper #(
   .pkt_o                                  ( pkt_o          )
 );
 
+/*
+sort_engine_with_out_merge #( 
+  .AWIDTH                                 ( AWIDTH            ),
+  .DWIDTH                                 ( DWIDTH            ),
+  .ENGINE_CNT                             ( 2                 )
+) seom (
+  .clk_i                                  ( clk               ),
+  .rst_i                                  ( rst               ),
+
+  .pkt_i                                  ( pkt_i             ),
+  .pkt_o                                  ( pkt_o             )
+);
+*/
+
+initial
+  begin
+    pkt_o.ready <= 1'b0;
+
+    forever
+      begin
+        @cb;
+        pkt_o.ready <= $urandom() % 2;
+      end
+
+  end
+
 bit [DWIDTH-1:0] prev_out_data;
 
 always_ff @( posedge clk )
@@ -60,7 +86,7 @@ always_ff @( posedge clk )
   if( pkt_o.eop && pkt_o.val )
     prev_out_data <= '0;
   else
-    if( pkt_o.val )
+    if( pkt_o.val && pkt_o.ready )
       prev_out_data <= pkt_o.data;
 
 initial
@@ -70,7 +96,7 @@ initial
         @cb;
         // checks that new data in transaction
         // not smaller than previous
-        if( pkt_o.val )
+        if( pkt_o.val && pkt_o.ready )
           assert( prev_out_data <= pkt_o.data );
       end
   end
@@ -84,7 +110,7 @@ initial
   end
 
 task send_transaction( trans_data_t data );
-  wait( pkt_i.busy == 1'b0 )
+  wait( pkt_i.ready == 1'b1 )
   
   for( int i = 0; i < data.size(); i++ ) begin
     pkt_i.val  <= 1'b1;
@@ -158,15 +184,26 @@ endtask
 task transaction_monitor( output trans_data_t trans );
   trans = {};
 
+  // $display("transaction_monitor: started");
+
   forever
     begin
-      @cb;
-      if( pkt_o.val )
-        trans.push_back( pkt_o.data );
+      // FIXME: dirty hack
+      @( negedge clk );
+      
+      // $display("%t: val = %d ready = %d eop = %d", $time(), pkt_o.val, pkt_o.ready, pkt_o.eop );
 
-      if( pkt_o.val && pkt_o.eop )
+      if( pkt_o.val && pkt_o.ready )
+        begin
+          trans.push_back( pkt_o.data );
+          $display("pushed: %h", pkt_o.data );
+        end 
+
+      if( pkt_o.val && pkt_o.ready && pkt_o.eop )
         break;
     end
+
+  // $display("transaction_monitor: ended");
 endtask
 
 task transaction_checker( );
@@ -179,7 +216,19 @@ task transaction_checker( );
       in_fifo_ref.get( ref_trans );
 
       if( out_trans != ref_trans )
-        $error( "Didn't match!" );
+        begin
+          $error( "Transactions didn't match!" );
+          $display("    DUT REF");
+          for( int i = 0; i < out_trans.size(); i++ )
+            begin
+              $display("%3d: %02h %02h", i, out_trans[i], ref_trans[i] );
+            end
+          $stop();
+        end
+      else
+        begin
+          $info( "Transcations match!" );
+        end
     end
 endtask
 
@@ -195,7 +244,7 @@ initial
 
     create_transaction( 1, RANDOM );
     create_transaction( 2, RANDOM );
-    create_transaction( 4, INCREASING );
+    create_transaction( 4, RANDOM );
     create_transaction( 4, DECREASING );
 
     create_transaction( 5, RANDOM );

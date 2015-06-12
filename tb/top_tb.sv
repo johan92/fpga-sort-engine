@@ -3,7 +3,7 @@ module top_tb;
 logic clk;
 logic rst;
 
-localparam AWIDTH = 5;
+localparam AWIDTH = 6;
 localparam DWIDTH = 8;
 
 sort_engine_if #( 
@@ -41,7 +41,7 @@ initial
     @( negedge clk );
     rst <= 1'b0;
   end
-
+/*
 gnome_sort_engine_wrapper #( 
   .AWIDTH                                 ( AWIDTH         ),
   .DWIDTH                                 ( DWIDTH         )
@@ -52,12 +52,12 @@ gnome_sort_engine_wrapper #(
   .pkt_i                                  ( pkt_i          ),
   .pkt_o                                  ( pkt_o          )
 );
+*/
 
-/*
-sort_engine_with_out_merge #( 
+sort_engine_with_merge #( 
   .AWIDTH                                 ( AWIDTH            ),
   .DWIDTH                                 ( DWIDTH            ),
-  .ENGINE_CNT                             ( 2                 )
+  .ENGINE_CNT                             ( 4                 )
 ) seom (
   .clk_i                                  ( clk               ),
   .rst_i                                  ( rst               ),
@@ -65,7 +65,6 @@ sort_engine_with_out_merge #(
   .pkt_i                                  ( pkt_i             ),
   .pkt_o                                  ( pkt_o             )
 );
-*/
 
 initial
   begin
@@ -74,7 +73,7 @@ initial
     forever
       begin
         @cb;
-        pkt_o.ready <= $urandom() % 2;
+        pkt_o.ready <= 1'b1; //$urandom() % 2;
       end
 
   end
@@ -178,7 +177,6 @@ task create_transaction( int size, sort_trans_t trans_type );
   
   trans.sort();
   in_fifo_ref.put( trans );
-
 endtask
 
 task transaction_monitor( output trans_data_t trans );
@@ -242,13 +240,13 @@ initial
     in_fifo     = new( );
     in_fifo_ref = new( );
 
+    create_transaction( 15, RANDOM );
     create_transaction( 1, RANDOM );
     create_transaction( 2, RANDOM );
     create_transaction( 4, RANDOM );
     create_transaction( 4, DECREASING );
 
     create_transaction( 5, RANDOM );
-    create_transaction( 15, RANDOM );
 
     create_transaction( 2**AWIDTH-1, RANDOM );
 

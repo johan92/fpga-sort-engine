@@ -51,7 +51,6 @@ logic [AWIDTH-1:0] rd_ptr;
 
 logic              sort_done;
 
-logic              rd_last_word_o;
 
 typedef enum int unsigned { IDLE, 
                             READ,
@@ -83,8 +82,9 @@ always_ff @( posedge clk_i or posedge rst_i )
 
 logic rd_req;
 logic in_ready;
+logic rd_done;
 
-assign rd_req   = sort_done && in_ready && ( !pkt_o.eop );  
+assign rd_req   = sort_done && in_ready && ( !rd_done ); //FIXME: add or last 
 assign in_ready = ( !out_valid_o ) || out_ready_i;
 
 always_ff @( posedge clk_i or posedge rst_i )
@@ -96,6 +96,16 @@ always_ff @( posedge clk_i or posedge rst_i )
     else
       if( rd_req && in_ready )
         rd_ptr <= rd_ptr + 1'd1;
+
+always_ff @( posedge clk_i or posedge rst_i )
+  if( rst_i )
+    rd_done <= 1'b0;
+  else
+    if( srst_i )
+      rd_done <= 1'b0;
+    else
+      if( out_eop_o && out_valid_o && out_ready_i )
+        rd_done <= 1'b1;
 
 always_ff @( posedge clk_i or posedge rst_i )
   if( rst_i )
@@ -248,16 +258,10 @@ always_ff @( posedge clk_i or posedge rst_i )
   else
     if( in_ready )
       begin
-        out_valid_o <= rd_req;
+        out_valid_o <= rd_req && ( !out_eop_o );
         out_sop_o   <= rd_req && ( rd_ptr == 'd0 );
         out_eop_o   <= rd_req && ( rd_ptr == ( array_size - 1'd1 ) ); 
       end
-
-always_ff @( posedge clk_i or posedge rst_i )
-  if( rst_i )
-    rd_last_word_o <= 1'b0;
-  else
-    rd_last_word_o <= ( rd_ptr == ( array_size - 1'd1 ) ) && rd_req;
 
 true_dual_port_ram_single_clock #(
   .DATA_WIDTH                             ( DWIDTH            ), 

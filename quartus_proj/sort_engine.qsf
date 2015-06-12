@@ -79,6 +79,7 @@ set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
 set_global_assignment -name ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON
 set_global_assignment -name MUX_RESTRUCTURE OFF
 set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
+set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/avalon_st_delay.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/sort_engine_with_merge.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/sort_engine_merge_tree_stage.sv
 set_global_assignment -name SDC_FILE sort_engine.out.sdc

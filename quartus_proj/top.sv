@@ -64,7 +64,7 @@ sort_engine_with_merge #(
   .AWIDTH     ( AWIDTH ),
   .DWIDTH     ( DWIDTH ),
 
-  .ENGINE_CNT ( 2      )
+  .ENGINE_CNT ( 4      )
 ) sewm (
   .clk_i                                  ( clk_i             ),
   .rst_i                                  ( rst_i             ),

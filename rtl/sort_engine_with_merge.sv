@@ -81,7 +81,7 @@ always_ff @( posedge clk_i or posedge rst_i )
     else
       was_se_wr_req <= was_se_wr_req | se_wr_req;
 
-genvar g;
+genvar g, z;
 generate
   for( g = 0; g < ENGINE_CNT; g++ )
     begin : g_eng
@@ -158,9 +158,29 @@ generate
       
       if( g == 0 )
         begin
-          assign _data_in_w          = se_data_w; 
-          assign _data_in_val_w      = se_valid_w       & {{ENGINE_CNT}{all_se_done}};
-          assign se_ready_w          = _data_in_ready_w & {{ENGINE_CNT}{all_se_done}};
+          logic [STAGE_IN_DATA_CNT-1:0] _se_valid_masked;
+          logic [STAGE_IN_DATA_CNT-1:0] _pre_se_ready_masked;
+
+          assign _se_valid_masked = se_valid_w           & {{ENGINE_CNT}{all_se_done}};
+          assign se_ready_w       = _pre_se_ready_masked & {{ENGINE_CNT}{all_se_done}};
+          
+          for( z = 0; z < STAGE_IN_DATA_CNT; z++ )
+            begin : _pipe_data_d1
+              avalon_st_delay #(
+                .DWIDTH                                 ( DWIDTH                  )
+              ) avalon_d1 (
+                .clk_i                                  ( clk_i                   ),
+                .rst_i                                  ( rst_i                   ),
+
+                .in_data_i                              ( se_data_w[z]            ),
+                .in_valid_i                             ( _se_valid_masked[z]     ),
+                .in_ready_o                             ( _pre_se_ready_masked[z] ),
+
+                .out_data_o                             ( _data_in_w[z]           ),
+                .out_valid_o                            ( _data_in_val_w[z]       ),
+                .out_ready_i                            ( _data_in_ready_w[z]     )
+              );
+            end
         end
       else
         begin

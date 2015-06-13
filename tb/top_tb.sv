@@ -74,28 +74,6 @@ initial
 
   end
 
-bit [DWIDTH-1:0] prev_out_data;
-
-always_ff @( posedge clk )
-  // clear after each output transation 
-  if( pkt_o.eop && pkt_o.val )
-    prev_out_data <= '0;
-  else
-    if( pkt_o.val && pkt_o.ready )
-      prev_out_data <= pkt_o.data;
-
-initial
-  begin
-    forever
-      begin
-        @cb;
-        // checks that new data in transaction
-        // not smaller than previous
-        if( pkt_o.val && pkt_o.ready )
-          assert( prev_out_data <= pkt_o.data );
-      end
-  end
-
 initial
   begin
     pkt_i.sop  = '0;

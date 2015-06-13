@@ -6,12 +6,13 @@ vlib work
 #vlog *.v
 
 # compiling systemerilog files
-vlog *.sv
+vlog sort_tb_pkg.sv
+vlog top_tb_3.sv
 vlog ../rtl/*.sv
 vlog ../rtl/*.v
 
 # t_tb is name for your testbench module
-vsim -novopt top_tb
+vsim -novopt top_tb_advanced
 
 #adding all waveforms in hex view
 add wave -r -hex *

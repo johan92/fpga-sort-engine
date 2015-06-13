@@ -265,5 +265,27 @@ initial
         $fatal();
       end
   end
+
+bit [DWIDTH-1:0] prev_pkt_o_data;
+
+always_ff @( posedge clk_i )
+  // clear after each output transation 
+  if( pkt_o.eop && pkt_o.val && pkt_o.ready )
+    prev_pkt_o_data <= '0;
+  else
+    if( pkt_o.val && pkt_o.ready )
+      prev_pkt_o_data <= pkt_o.data;
+
+initial
+  begin
+    forever
+      begin
+        @( posedge clk_i );
+        if( pkt_o.val && pkt_o.ready )
+          assert( prev_pkt_o_data <= pkt_o.data );
+      end
+  end
+
+
 // synthesys translate_on
 endmodule

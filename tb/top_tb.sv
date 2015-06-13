@@ -1,5 +1,7 @@
 module top_tb;
 
+`include "sort_trans.sv"
+
 logic clk;
 logic rst;
 
@@ -14,14 +16,7 @@ sort_engine_if #(
   .DWIDTH ( DWIDTH ) 
 ) pkt_o ( clk );
 
-typedef enum { 
-               RANDOM,
-               INCREASING,
-               DECREASING,
-               CONSTANT
-             } sort_trans_t;
-
-typedef bit[DWIDTH-1:0] trans_data_t[$];
+typedef sort_trans_t #( .DWIDTH( DWIDTH ),  .MAX_TRANS_SIZE( 2**AWIDTH ) ) __sort_trans_t;
 
 clocking cb @( posedge clk );
 endclocking
@@ -109,14 +104,15 @@ initial
     pkt_i.val  = '0;
   end
 
-task send_transaction( trans_data_t data );
+// TODO: check ready for each tick!
+task send_transaction( input __sort_trans_t data );
   wait( pkt_i.ready == 1'b1 )
   
-  for( int i = 0; i < data.size(); i++ ) begin
+  for( int i = 0; i < data.size; i++ ) begin
     pkt_i.val  <= 1'b1;
-    pkt_i.data <= data[i];
-    pkt_i.sop  <= ( i == ( 0               ) ); 
-    pkt_i.eop  <= ( i == ( data.size() - 1 ) );
+    pkt_i.data <= data.payload[i];
+    pkt_i.sop  <= ( i == ( 0             ) ); 
+    pkt_i.eop  <= ( i == ( data.size - 1 ) );
     @( posedge pkt_i.clk );
    end
 
@@ -126,53 +122,28 @@ task send_transaction( trans_data_t data );
    @( posedge pkt_i.clk );
 endtask
 
-function trans_data_t gen_transaction( int size, sort_trans_t trans_type );
-  trans_data_t res;
-  res = {};
+mailbox #( __sort_trans_t ) in_fifo;
+mailbox #( __sort_trans_t ) in_fifo_ref;
+
+task automatic create_transaction( input bit ultra_random = 1'b0, int _size, sort_trans_type_t _trans_type );
   
-  for( int i = 0; i < size; i++ ) begin
-
-    case( trans_type )
-      RANDOM: 
-        begin
-          res.push_back( $urandom() );
-        end
-
-      INCREASING:
-        begin
-          res.push_back( i );
-        end
-
-      DECREASING:
-        begin
-          res.push_back( size - i - 1 );
-        end
-
-      CONSTANT:
-        begin
-          if( i == 0 ) begin
-            res.push_back( $urandom() );
-          end else begin
-            res.push_back( res[0] );
-          end
-        end
-    endcase
-
-  end
-    
-  return res;
-
-endfunction
-
-mailbox #( trans_data_t ) in_fifo;
-mailbox #( trans_data_t ) in_fifo_ref;
-
-task create_transaction( int size, sort_trans_t trans_type );
-  trans_data_t trans;
+  __sort_trans_t trans = new();
   
-  trans = gen_transaction( size, trans_type );
+  $display("create_transaction: %d, %d, %s", ultra_random, _size, _trans_type.name() );
+
+  if( ultra_random == 1'b0 )
+    begin
+      trans.randomize() with {
+         size == _size;
+        _type == _trans_type;
+      };
+    end
+  else
+    begin
+      trans.randomize();
+    end
   
-  assert( trans.size() == size );
+  trans.print(); 
 
   in_fifo.put( trans );
   
@@ -180,8 +151,8 @@ task create_transaction( int size, sort_trans_t trans_type );
   in_fifo_ref.put( trans );
 endtask
 
-task transaction_monitor( output trans_data_t trans );
-  trans = {};
+task transaction_monitor( output __sort_trans_t trans );
+  trans = new();
 
   // $display("transaction_monitor: started");
 
@@ -194,7 +165,7 @@ task transaction_monitor( output trans_data_t trans );
 
       if( pkt_o.val && pkt_o.ready )
         begin
-          trans.push_back( pkt_o.data );
+          trans.payload.push_back( pkt_o.data );
           $display("pushed: %h", pkt_o.data );
         end 
 
@@ -206,21 +177,21 @@ task transaction_monitor( output trans_data_t trans );
 endtask
 
 task transaction_checker( );
-  trans_data_t ref_trans;
-  trans_data_t out_trans;
+  __sort_trans_t ref_trans = new ();
+  __sort_trans_t out_trans = new ();
 
   forever
     begin
       transaction_monitor( out_trans );
       in_fifo_ref.get( ref_trans );
 
-      if( out_trans != ref_trans )
+      if( out_trans.is_equal( ref_trans ) == 1'b0 )
         begin
           $error( "Transactions didn't match!" );
           $display("    DUT REF");
-          for( int i = 0; i < out_trans.size(); i++ )
+          for( int i = 0; i < out_trans.payload.size(); i++ )
             begin
-              $display("%3d: %02h %02h", i, out_trans[i], ref_trans[i] );
+              $display("%3d: %02h %02h", i, out_trans.payload[i], ref_trans.payload[i] );
             end
           $stop();
         end
@@ -241,39 +212,43 @@ initial
     in_fifo     = new( );
     in_fifo_ref = new( );
 
-    create_transaction( 15, RANDOM );
-    create_transaction( 1, RANDOM );
-    create_transaction( 2, RANDOM );
-    create_transaction( 4, RANDOM );
-    create_transaction( 4, DECREASING );
+    create_transaction( 0, 15, RANDOM );
+    create_transaction( 0, 1, RANDOM );
+    create_transaction( 0, 2, RANDOM );
+    create_transaction( 0, 4, RANDOM );
+    create_transaction( 0, 4, DECREASING );
+    
+    create_transaction( 0, 5, RANDOM );
 
-    create_transaction( 5, RANDOM );
+    create_transaction( 0, 2**AWIDTH-1, RANDOM );
 
-    create_transaction( 2**AWIDTH-1, RANDOM );
-
-    create_transaction( 2**AWIDTH, RANDOM );
-    create_transaction( 2**AWIDTH, INCREASING );
-    create_transaction( 2**AWIDTH, RANDOM );
-    create_transaction( 2**AWIDTH, DECREASING );
-    create_transaction( 2**AWIDTH, CONSTANT );
+    create_transaction( 0, 2**AWIDTH, RANDOM );
+    create_transaction( 0, 2**AWIDTH, INCREASING );
+    create_transaction( 0, 2**AWIDTH, RANDOM );
+    create_transaction( 0, 2**AWIDTH, DECREASING );
+    create_transaction( 0, 2**AWIDTH, CONSTANT );
 
     for( int i = 0; i < 100; i++ )
       begin
-        create_transaction( $urandom_range( 1, 2**AWIDTH ), RANDOM );
+        create_transaction( 1, 0, RANDOM );
       end
   end
 
-trans_data_t trans_to_dut;
+__sort_trans_t trans_to_dut;
 
 initial
   begin
+    trans_to_dut = new();
+
     @cb;
     forever
       begin
         @cb;
         if( in_fifo.num() > 0 ) 
           begin
-            in_fifo.get( trans_to_dut ); 
+            in_fifo.get( trans_to_dut );
+            $display("TRANS_TO_DUT size = %d", in_fifo.num() );
+            trans_to_dut.print();
             send_transaction( trans_to_dut );
           end
       end

@@ -73,7 +73,8 @@ initial
     forever
       begin
         @cb;
-        pkt_o.ready <= 1'b1; //$urandom() % 2;
+        //pkt_o.ready <= 1'b1; //$urandom() % 2;
+        pkt_o.ready <= $urandom() % 2;
       end
 
   end

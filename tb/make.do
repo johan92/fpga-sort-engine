@@ -8,6 +8,7 @@ vlib work
 # compiling systemerilog files
 vlog *.sv
 vlog ../rtl/*.sv
+vlog ../rtl/*.v
 
 # t_tb is name for your testbench module
 vsim -novopt top_tb

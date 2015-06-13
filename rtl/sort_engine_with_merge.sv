@@ -164,23 +164,32 @@ generate
           assign _se_valid_masked = se_valid_w           & {{ENGINE_CNT}{all_se_done}};
           assign se_ready_w       = _pre_se_ready_masked & {{ENGINE_CNT}{all_se_done}};
           
+
+          // delay for better Fmax.
+          // you can delete it and make just wires or use PIPELINE_READY == 0,
+          // for less resources but worse Fmax
           for( z = 0; z < STAGE_IN_DATA_CNT; z++ )
             begin : _pipe_data_d1
-              avalon_st_delay #(
-                .DWIDTH                                 ( DWIDTH                  )
+
+              altera_avalon_st_pipeline_base #(
+                .SYMBOLS_PER_BEAT                       ( 1                         ),
+                .BITS_PER_SYMBOL                        ( DWIDTH                    ),
+                .PIPELINE_READY                         ( 1                         )
               ) avalon_d1 (
-                .clk_i                                  ( clk_i                   ),
-                .rst_i                                  ( rst_i                   ),
+                .clk                                    ( clk_i                     ),
+                .reset                                  ( rst_i                     ),
 
-                .in_data_i                              ( se_data_w[z]            ),
-                .in_valid_i                             ( _se_valid_masked[z]     ),
-                .in_ready_o                             ( _pre_se_ready_masked[z] ),
+                .in_ready                               (  _pre_se_ready_masked[z]  ),
+                .in_valid                               (  _se_valid_masked[z]      ),
+                .in_data                                (  se_data_w[z]             ),
 
-                .out_data_o                             ( _data_in_w[z]           ),
-                .out_valid_o                            ( _data_in_val_w[z]       ),
-                .out_ready_i                            ( _data_in_ready_w[z]     )
+                .out_ready                              ( _data_in_ready_w[z]       ),
+                .out_valid                              ( _data_in_val_w[z]         ),
+                .out_data                               ( _data_in_w[z]             )
               );
+
             end
+
         end
       else
         begin
@@ -208,8 +217,8 @@ generate
     end
 endgenerate
 
-assign last_stage_data  = g_stages[STAGES_CNT-1]._data_out_w;
-assign last_stage_val   = g_stages[STAGES_CNT-1]._data_out_val_w;
+assign last_stage_data                          = g_stages[STAGES_CNT-1]._data_out_w;
+assign last_stage_val                           = g_stages[STAGES_CNT-1]._data_out_val_w;
 assign g_stages[STAGES_CNT-1]._data_out_ready_w = last_stage_ready; 
 
 assign last_stage_ready = ( !pkt_o.val ) || pkt_o.ready;

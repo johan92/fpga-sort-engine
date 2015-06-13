@@ -36,14 +36,14 @@ generate
       logic              _l_ready;
       logic              _r_ready;
 
-      logic [DWIDTH-1:0] _l_r_data_min;
       logic              _l_sel;
+      logic              _l_lt_r;
 
       logic [DWIDTH-1:0] _next_data;
       logic              _next_data_val;
       
-      assign _l_sel        = ( _l_data < _r_data ); 
-      assign _l_r_data_min = ( _l_sel ) ? ( _l_data ) : ( _r_data );
+      assign _l_lt_r       = ( _l_data < _r_data ); 
+      assign _next_data    = ( _l_sel ) ? ( _l_data ) : ( _r_data );
 
       assign _l_data     = data_in_i    [ OFFSET     ];
       assign _r_data     = data_in_i    [ OFFSET + 1 ];
@@ -56,10 +56,10 @@ generate
       always_comb
         begin
           case( { _l_data_val, _r_data_val } )
-            2'b00: { _next_data_val, _next_data } = { 1'b0, _l_data       }; 
-            2'b01: { _next_data_val, _next_data } = { 1'b1, _r_data       }; 
-            2'b10: { _next_data_val, _next_data } = { 1'b1, _l_data       }; 
-            2'b11: { _next_data_val, _next_data } = { 1'b1, _l_r_data_min }; 
+            2'b00: { _next_data_val, _l_sel } = { 1'b0, 1'b1     }; 
+            2'b01: { _next_data_val, _l_sel } = { 1'b1, 1'b0     }; 
+            2'b10: { _next_data_val, _l_sel } = { 1'b1, 1'b1     }; 
+            2'b11: { _next_data_val, _l_sel } = { 1'b1, _l_lt_r  }; 
           endcase
         end
 
@@ -69,7 +69,7 @@ generate
             2'b00: { _l_ready, _r_ready } = { 1'b0, 1'b0       }; 
             2'b01: { _l_ready, _r_ready } = { 1'b0, 1'b1       }; 
             2'b10: { _l_ready, _r_ready } = { 1'b1, 1'b0       }; 
-            2'b11: { _l_ready, _r_ready } = _l_sel ? ( 2'b10 ) : ( 2'b01 ); 
+            2'b11: { _l_ready, _r_ready } = _l_lt_r ? ( 2'b10 ) : ( 2'b01 ); 
           endcase
 
           _l_ready = _l_ready && _in_ready;

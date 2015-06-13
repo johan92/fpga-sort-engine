@@ -40,6 +40,7 @@ logic              wr_en_b;
 logic [AWIDTH:0]   i;
 logic [AWIDTH:0]   i_m1;
 logic [AWIDTH:0]   j;
+logic [AWIDTH:0]   j_p1;
 
 logic [AWIDTH:0]   next_i;
 logic [AWIDTH:0]   next_j;
@@ -113,6 +114,7 @@ always_ff @( posedge clk_i or posedge rst_i )
       i    <= '0;
       i_m1 <= '0;
       j    <= '0;
+      j_p1 <= '0;
     end
   else
     if( run_i )
@@ -120,6 +122,7 @@ always_ff @( posedge clk_i or posedge rst_i )
         i    <= 'd1;
         i_m1 <= 'd0;
         j    <= 'd2;
+        j_p1 <= 'd3;
       end
     else
       if( next_tick == READ )
@@ -127,6 +130,7 @@ always_ff @( posedge clk_i or posedge rst_i )
           i    <= next_i;
           i_m1 <= next_i - 1'd1;
           j    <= next_j;
+          j_p1 <= next_j + 1'd1;
         end
 
 always_ff @( posedge clk_i or posedge rst_i )
@@ -191,13 +195,13 @@ always_comb begin
 
   if( !need_swap ) begin
     next_i = next_j;
-    next_j = next_j + 1'd1;
+    next_j = j_p1;
   end else begin
     next_i = i_m1;
 
     if( i_m1 == 'd0 ) begin
       next_i = next_j;
-      next_j = next_j + 1'd1;
+      next_j = j_p1;
     end
   end
 end
@@ -241,7 +245,7 @@ always_comb
     if( in_sorting )
       begin
         wr_en_b   = ( tick == SWAP );
-        addr_b    = i - 1'd1; 
+        addr_b    = i_m1; 
         wr_data_b = rd_data_a;
       end
   end
